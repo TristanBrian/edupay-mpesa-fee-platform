@@ -18,7 +18,11 @@ from .routes import (
     guardians_router,
     students_router,
     invoices_router,
+    installments_router,
+    loans_router,
+    analytics_router,
 )
+from .services.security import check_env_security
 from .middleware import RateLimitMiddleware, SecurityHeadersMiddleware
 
 logging.basicConfig(
@@ -31,6 +35,12 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting FlexiFees API...")
+    
+    # Security check on startup
+    security_warnings = check_env_security()
+    if security_warnings:
+        logger.warning(f"Security warnings detected: {len(security_warnings)}")
+    
     await init_db()
     logger.info("Database initialized successfully")
     yield
@@ -118,6 +128,9 @@ app.include_router(guardians_router, prefix="/api/v1")
 app.include_router(students_router, prefix="/api/v1")
 app.include_router(invoices_router, prefix="/api/v1")
 app.include_router(payments_router, prefix="/api/v1")
+app.include_router(installments_router, prefix="/api/v1")
+app.include_router(loans_router, prefix="/api/v1")
+app.include_router(analytics_router, prefix="/api/v1")
 
 
 @app.get("/")
