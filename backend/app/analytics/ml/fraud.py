@@ -1,38 +1,83 @@
-from sklearn.ensemble import IsolationForest
+import joblib
 import pandas as pd
+import os
+from sklearn.ensemble import IsolationForest
+from app.analytics.features import build_features
+
+# Global cache to store the model once loaded
+MODEL_CACHE = None
+
+# Professional Path Handling: Works in Docker (/app/...) and Local Dev
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(BASE_DIR, "../../analytics/models/fraud_model.pkl")
 
 def detect_fraud(df):
     """
-    Detects anomalies in payment patterns using Isolation Forest.
+    Detects anomalies in payment patterns using a pre-trained Isolation Forest.
     Returns a DataFrame with 'id' and 'fraud_flag'.
     """
-    # 1. Handle empty or too small datasets (IsolationForest needs multiple samples)
-    if df.empty or len(df) < 2:
-        # Create an empty result with the correct structure
+    global MODEL_CACHE
+
+    if df.empty:
         return pd.DataFrame(columns=['id', 'fraud_flag'])
 
-    # 2. Work on a copy to avoid SettingWithCopy warnings in the dashboard
-    data = df.copy()
+    # 1. Load Model with Cache Logic
+    if MODEL_CACHE is None:
+        if not os.path.exists(MODEL_PATH):
+            print(f"⚠️ Warning: Model not found at {MODEL_PATH}. Check training_pipeline logs.")
+            # Graceful fallback: mark everything as non-fraud so the UI doesn't break
+            return pd.DataFrame({
+                'id': df['id'] if 'id' in df.columns else range(len(df)), 
+                'fraud_flag': 0
+            })
+        
+        try:
+            MODEL_CACHE = joblib.load(MODEL_PATH)
+            print(f"✅ Model loaded into cache from {MODEL_PATH}")
+        except Exception as e:
+            print(f"❌ Error loading model: {e}")
+            return pd.DataFrame({'id': df.get('id', range(len(df))), 'fraud_flag': 0})
 
-    # 3. Feature Selection
-    # We use 'paid_amount' and 'total_amount' to find outliers 
-    # (e.g., payments much higher than the total due)
-    features = data[['paid_amount', 'total_amount']].fillna(0)
+    # 2. Feature Engineering
+    # We call build_features to get the Z-scores and rolling windows
+    X, _ = build_features(df)
 
-    # 4. Model Training
-    # contamination=0.05 means we expect ~5% of transactions to be outliers
-    model = IsolationForest(contamination=0.05, random_state=42)
+    # 3. Feature Selection & Alignment
+    # These MUST match the features used in your training_pipeline.py
+    fraud_features = [
+        'payment_ratio', 
+        'amount_zscore', 
+        'rolling_24h_cnt', 
+        'is_night_txn'
+    ]
     
-    # fit_predict returns 1 for normal, -1 for anomalies
-    predictions = model.fit_predict(features)
+    # Ensure all required features exist (fill with 0 if missing)
+    for feature in fraud_features:
+        if feature not in X.columns:
+            X[feature] = 0
 
-    # 5. Format results
-    # Convert: -1 (anomaly) → 1 (fraud_flag), 1 (normal) → 0 (no fraud)
-    data['fraud_flag'] = [1 if x == -1 else 0 for x in predictions]
+    X_fraud = X[fraud_features]
 
-    # 6. Return only the essential columns for merging
-    if 'id' in data.columns:
-        return data[['id', 'fraud_flag']]
+    # 4. Inference
+    # IsolationForest returns -1 for outliers (fraud) and 1 for inliers (normal)
+    try:
+        predictions = MODEL_CACHE.predict(X_fraud)
+        fraud_flags = [1 if x == -1 else 0 for x in predictions]
+    except Exception as e:
+        print(f"❌ Prediction Error: {e}")
+        fraud_flags = [0] * len(df)
+
+    # 5. Result Mapping
+    if 'id' in df.columns:
+        return pd.DataFrame({'id': df['id'], 'fraud_flag': fraud_flags})
     else:
-        # Fallback if 'id' is missing: return a flag for every row
-        return pd.DataFrame({'fraud_flag': data['fraud_flag']})
+        return pd.DataFrame({'fraud_flag': fraud_flags})
+
+def train_fraud_model(X_train):
+    """
+    Trains the Isolation Forest model on engineered features.
+    Contamination=0.05 assumes roughly 5% of your data might be anomalous.
+    """
+    model = IsolationForest(contamination=0.05, random_state=42)
+    model.fit(X_train)
+    return model
