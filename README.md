@@ -117,6 +117,7 @@ edupay/
 - Node.js 18+
 - Python 3.10+
 - Safaricom Developer Account (for M-Pesa)
+- ngrok (for localhost callback testing)
 
 ### Frontend Setup
 
@@ -152,6 +153,69 @@ uvicorn app.main:app --reload --port 8000
 
 # API docs at http://localhost:8000/docs
 ```
+
+## M-Pesa STK Push Testing Guide
+
+### Step 1: Get Daraja API Credentials
+
+1. Go to [Safaricom Developer Portal](https://developer.safaricom.co.ke)
+2. Create an account and log in
+3. Create a new app (select Lipa Na M-Pesa Sandbox)
+4. Copy your **Consumer Key** and **Consumer Secret**
+
+### Step 2: Setup ngrok for Callbacks
+
+M-Pesa requires a publicly accessible callback URL. Use ngrok for localhost:
+
+```bash
+# Install ngrok (https://ngrok.com/download)
+
+# Start ngrok tunnel to your backend
+ngrok http 8000
+
+# You'll see something like:
+# Forwarding: https://a1b2c3d4.ngrok.io -> http://localhost:8000
+```
+
+### Step 3: Configure Environment
+
+Update your `.env` file:
+
+```env
+# Your Daraja credentials
+MPESA_CONSUMER_KEY=your_actual_consumer_key
+MPESA_CONSUMER_SECRET=your_actual_consumer_secret
+
+# Sandbox defaults (keep these for testing)
+MPESA_SHORTCODE=174379
+MPESA_PASSKEY=bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919
+
+# Your ngrok URL + callback path
+MPESA_CALLBACK_URL=https://a1b2c3d4.ngrok.io/api/v1/payments/callback
+
+# Switch to real API
+MOCK_MPESA=false
+```
+
+### Step 4: Test STK Push
+
+1. Start the backend: `uvicorn app.main:app --reload --port 8000`
+2. Start the frontend: `npm run dev`
+3. Go to Dashboard > Payments > New STK Push
+4. Enter your Safaricom phone number and amount
+5. Click "Send STK Push"
+6. Check your phone for the M-Pesa prompt
+7. Enter your PIN to complete payment
+
+### Mock Mode Testing
+
+For UI testing without real M-Pesa:
+
+```env
+MOCK_MPESA=true
+```
+
+Use the "Simulate Success" button in the payment dialog to test the full flow.
 
 ## API Reference
 
