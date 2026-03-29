@@ -1,0 +1,11 @@
+{
+    "train_date": "2026-03-29T19:33:22.091824",
+    "version": "fraud_model_20260329_193321.pkl",
+    "model_type": "IsolationForest",
+    "expected_features": [
+        "payment_ratio",
+        "amount_zscore",
+        "rolling_24h_cnt",
+        "is_night_txn"
+    ]
+}
