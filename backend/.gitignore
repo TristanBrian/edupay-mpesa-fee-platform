@@ -1,4 +1,23 @@
+# Environment
 .env
-schema.sql
-flexifees.db
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
 venv/
+.venv/
+env/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+edupay.db
+
+# Credentials
+.credentials/
+
+# IDE
+.idea/
+.vscode/
