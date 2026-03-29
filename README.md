@@ -148,7 +148,10 @@ pip install -r requirements.txt
 cp .env.example .env
 # Edit .env with your M-Pesa credentials
 
-# Run server
+# Run server (Option 1 - recommended)
+python run.py
+
+# Run server (Option 2 - uvicorn directly)
 uvicorn app.main:app --reload --port 8000
 
 # API docs at http://localhost:8000/docs
