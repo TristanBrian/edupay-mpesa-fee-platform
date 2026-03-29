@@ -23,7 +23,6 @@ from .routes import (
     analytics_router,
 )
 from .routes.settings import router as settings_router
-from .services.security import check_env_security
 from .middleware import RateLimitMiddleware, SecurityHeadersMiddleware
 
 logging.basicConfig(
@@ -35,21 +34,16 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Starting FlexiFees API...")
-    
-    # Security check on startup
-    security_warnings = check_env_security()
-    if security_warnings:
-        logger.warning(f"Security warnings detected: {len(security_warnings)}")
+    logger.info("Starting EduPay API...")
     
     await init_db()
     logger.info("Database initialized successfully")
     yield
-    logger.info("Shutting down FlexiFees API...")
+    logger.info("Shutting down EduPay API...")
 
 
 app = FastAPI(
-    title="FlexiFees API",
+    title="EduPay API",
     description="Smart Student Finance Platform - M-Pesa Integration",
     version="1.0.0",
     lifespan=lifespan,
@@ -138,7 +132,7 @@ app.include_router(settings_router, prefix="/api/v1")
 @app.get("/")
 def home():
     return {
-        "message": "FlexiFees API",
+        "message": "EduPay API",
         "version": "1.0.0",
         "docs": "/docs",
         "health": "/health"
@@ -147,4 +141,4 @@ def home():
 
 @app.get("/health")
 def health_check():
-    return {"status": "healthy", "service": "FlexiFees API"}
+    return {"status": "healthy", "service": "EduPay API"}
