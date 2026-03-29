@@ -7,18 +7,20 @@ import sys
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(BASE_DIR)
 
-from seed_data import seed_data  # now works because BASE_DIR is in sys.path
+from seed_data import seed_data 
 
 DB_PATH = os.path.join(BASE_DIR, "flexifees.db")
 
 def load_data():
     if not os.path.exists(DB_PATH):
-        seed_data()  # create DB if missing
+        seed_data()
 
     conn = sqlite3.connect(DB_PATH)
+    # ADDED: invoices.student_id to the SELECT statement
     query = """
     SELECT 
         invoices.id,
+        invoices.student_id,
         invoices.total_amount,
         invoices.paid_amount,
         invoices.balance,
@@ -32,8 +34,8 @@ def load_data():
     try:
         df = pd.read_sql_query(query, conn)
     except pd.io.sql.DatabaseError:
-        # If table missing, seed DB
         seed_data()
         df = pd.read_sql_query(query, conn)
-    conn.close()
+    finally:
+        conn.close()
     return df
