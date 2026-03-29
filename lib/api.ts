@@ -102,6 +102,18 @@ export const loansApi = {
     fetcher<CreditScore>(`/loans/credit-score/${guardianId}`),
 };
 
+// Settings API
+export const settingsApi = {
+  getMpesaSettings: () => fetcher<MpesaSettingsResponse>("/settings/mpesa"),
+  saveMpesaSettings: (data: SaveMpesaSettingsRequest) =>
+    fetcher<MpesaSettingsResponse>("/settings/mpesa", { 
+      method: "POST", 
+      body: JSON.stringify(data) 
+    }),
+  testConnection: () => fetcher<TestConnectionResponse>("/settings/mpesa/test", { method: "POST" }),
+  clearMpesaSettings: () => fetcher<{ message: string }>("/settings/mpesa", { method: "DELETE" }),
+};
+
 // Analytics API
 export const analyticsApi = {
   getOverview: () => fetcher<AnalyticsOverview>("/analytics/overview"),
@@ -304,6 +316,31 @@ export interface PaymentPrediction {
   at_risk_amount: number;
   predicted_default_rate: number;
   recommendations: string[];
+}
+
+// Settings types
+export interface MpesaSettingsResponse {
+  consumer_key_set: boolean;
+  consumer_secret_set: boolean;
+  environment: string;
+  callback_url: string;
+  shortcode: string;
+  is_configured: boolean;
+  last_updated?: string;
+}
+
+export interface SaveMpesaSettingsRequest {
+  consumer_key: string;
+  consumer_secret: string;
+  environment?: string;
+  callback_url?: string;
+}
+
+export interface TestConnectionResponse {
+  success: boolean;
+  message: string;
+  access_token_obtained: boolean;
+  environment: string;
 }
 
 // Request types

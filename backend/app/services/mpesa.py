@@ -1,11 +1,17 @@
 """
 M-Pesa Daraja 2.0 API Integration Service
 Handles STK Push, callbacks, and transaction queries
+
+Supports dynamic credential loading from:
+1. Frontend settings (saved to .credentials/mpesa.json)
+2. Environment variables (.env file)
 """
 import base64
 import secrets
 import logging
+import json
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Optional, Dict, Any
 
 import httpx
@@ -21,6 +27,9 @@ MPESA_BASE_URLS = {
     "production": "https://api.safaricom.co.ke",
 }
 
+# Credentials file path
+CREDENTIALS_FILE = Path(__file__).parent.parent.parent / ".credentials" / "mpesa.json"
+
 
 class MpesaService:
     """
@@ -31,10 +40,13 @@ class MpesaService:
     - STK Push (Lipa Na M-Pesa Online)
     - STK Push query
     - Callback processing
+    - Dynamic credential reloading
     """
     
     def __init__(self):
-        self.environment = settings.environment
+        # Load credentials (file first, then env vars)
+        self._load_credentials()
+        
         self.base_url = MPESA_BASE_URLS.get(self.environment, MPESA_BASE_URLS["sandbox"])
         self._access_token: Optional[str] = None
         self._token_expiry: Optional[datetime] = None
@@ -42,11 +54,77 @@ class MpesaService:
         # Log initialization
         logger.info(f"MpesaService initialized in {self.environment} mode")
         logger.info(f"Base URL: {self.base_url}")
-        logger.info(f"Callback URL: {settings.mpesa_callback_url}")
+        logger.info(f"Callback URL: {self.callback_url}")
+        logger.info(f"Credentials configured: {self.is_configured}")
+
+    def _load_credentials(self):
+        """Load credentials from file or environment"""
+        saved = {}
+        
+        # Try loading from saved file first
+        if CREDENTIALS_FILE.exists():
+            try:
+                with open(CREDENTIALS_FILE, "r") as f:
+                    saved = json.load(f)
+                logger.info("Loaded credentials from saved file")
+            except Exception as e:
+                logger.warning(f"Could not load saved credentials: {e}")
+        
+        # Set credentials with fallback to env vars
+        self.consumer_key = saved.get("consumer_key") or settings.mpesa_consumer_key
+        self.consumer_secret = saved.get("consumer_secret") or settings.mpesa_consumer_secret
+        self.environment = saved.get("environment") or settings.environment
+        self.callback_url = saved.get("callback_url") or settings.mpesa_callback_url
+        
+        # These use sandbox defaults
+        self.shortcode = settings.mpesa_shortcode
+        self.passkey = settings.mpesa_passkey
+        
+        # Check if properly configured
+        self.is_configured = (
+            self.consumer_key and 
+            self.consumer_key != "YOUR_CONSUMER_KEY" and
+            self.consumer_secret and 
+            self.consumer_secret != "YOUR_CONSUMER_SECRET"
+        )
+
+    def reload_credentials(
+        self,
+        consumer_key: Optional[str] = None,
+        consumer_secret: Optional[str] = None,
+        environment: Optional[str] = None,
+        callback_url: Optional[str] = None,
+    ):
+        """
+        Reload credentials dynamically (called when settings are updated)
+        """
+        if consumer_key:
+            self.consumer_key = consumer_key
+        if consumer_secret:
+            self.consumer_secret = consumer_secret
+        if environment:
+            self.environment = environment
+            self.base_url = MPESA_BASE_URLS.get(environment, MPESA_BASE_URLS["sandbox"])
+        if callback_url:
+            self.callback_url = callback_url
+        
+        # Clear cached token to force re-authentication
+        self._access_token = None
+        self._token_expiry = None
+        
+        # Update configured status
+        self.is_configured = (
+            self.consumer_key and 
+            self.consumer_key != "YOUR_CONSUMER_KEY" and
+            self.consumer_secret and 
+            self.consumer_secret != "YOUR_CONSUMER_SECRET"
+        )
+        
+        logger.info(f"Credentials reloaded. Environment: {self.environment}, Configured: {self.is_configured}")
 
     def _get_auth_header(self) -> str:
         """Generate Basic Auth header for OAuth"""
-        credentials = f"{settings.mpesa_consumer_key}:{settings.mpesa_consumer_secret}"
+        credentials = f"{self.consumer_key}:{self.consumer_secret}"
         encoded = base64.b64encode(credentials.encode()).decode()
         return encoded
 
@@ -55,7 +133,7 @@ class MpesaService:
         Generate password for STK Push
         Password = Base64.encode(BusinessShortCode + Passkey + Timestamp)
         """
-        password_str = f"{settings.mpesa_shortcode}{settings.mpesa_passkey}{timestamp}"
+        password_str = f"{self.shortcode}{self.passkey}{timestamp}"
         return base64.b64encode(password_str.encode()).decode()
 
     def _generate_timestamp(self) -> str:
@@ -92,12 +170,17 @@ class MpesaService:
         Get OAuth access token from Daraja API
         Caches token until expiry
         """
+        # Check if credentials are configured
+        if not self.is_configured:
+            raise Exception("M-Pesa credentials not configured. Please add your Consumer Key and Secret in Settings.")
+        
         # Return cached token if still valid
         if self._access_token and self._token_expiry and datetime.now() < self._token_expiry:
             logger.debug("Using cached access token")
             return self._access_token
 
         logger.info("Requesting new access token from Daraja API")
+        logger.debug(f"Using URL: {self.base_url}/oauth/v1/generate")
         
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
@@ -107,6 +190,10 @@ class MpesaService:
                 )
                 
                 logger.debug(f"OAuth Response Status: {response.status_code}")
+                
+                if response.status_code == 401:
+                    logger.error("OAuth failed: Invalid credentials")
+                    raise Exception("Invalid M-Pesa credentials. Please check your Consumer Key and Secret.")
                 
                 if response.status_code != 200:
                     logger.error(f"OAuth failed: {response.text}")
@@ -124,7 +211,7 @@ class MpesaService:
                 
         except httpx.RequestError as e:
             logger.error(f"Network error getting access token: {str(e)}")
-            raise Exception(f"Network error: {str(e)}")
+            raise Exception(f"Network error connecting to M-Pesa: {str(e)}")
 
     async def stk_push(
         self,
@@ -149,8 +236,10 @@ class MpesaService:
         formatted_phone = self._format_phone_number(phone)
         
         # Validate amount
-        if amount < 1 or amount > 150000:
-            raise ValueError("Amount must be between 1 and 150,000 KES")
+        if amount < 1:
+            raise ValueError("Amount must be at least 1 KES")
+        if amount > 150000:
+            raise ValueError("Amount cannot exceed 150,000 KES")
         
         # Get access token
         access_token = await self.get_access_token()
@@ -161,21 +250,21 @@ class MpesaService:
         
         # Prepare payload
         payload = {
-            "BusinessShortCode": settings.mpesa_shortcode,
+            "BusinessShortCode": self.shortcode,
             "Password": password,
             "Timestamp": timestamp,
             "TransactionType": "CustomerPayBillOnline",
             "Amount": int(amount),
             "PartyA": formatted_phone,
-            "PartyB": settings.mpesa_shortcode,
+            "PartyB": self.shortcode,
             "PhoneNumber": formatted_phone,
-            "CallBackURL": settings.mpesa_callback_url,
+            "CallBackURL": self.callback_url,
             "AccountReference": account_reference[:20],  # Max 20 chars
             "TransactionDesc": transaction_desc[:13],    # Max 13 chars
         }
         
         logger.info(f"Initiating STK Push: {formatted_phone}, KES {amount}, Ref: {account_reference}")
-        logger.debug(f"Callback URL: {settings.mpesa_callback_url}")
+        logger.debug(f"Callback URL: {self.callback_url}")
         
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
@@ -229,7 +318,7 @@ class MpesaService:
         password = self._generate_password(timestamp)
         
         payload = {
-            "BusinessShortCode": settings.mpesa_shortcode,
+            "BusinessShortCode": self.shortcode,
             "Password": password,
             "Timestamp": timestamp,
             "CheckoutRequestID": checkout_request_id,
