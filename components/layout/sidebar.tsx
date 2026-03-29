@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
@@ -46,16 +47,26 @@ export function Sidebar() {
       <div className="flex h-16 items-center justify-between border-b px-4">
         {!collapsed && (
           <Link href="/dashboard" className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-              <span className="text-sm font-bold text-primary-foreground">E</span>
-            </div>
+            <Image
+              src="/logo.jpg"
+              alt="EduPay Logo"
+              width={32}
+              height={32}
+              className="rounded-lg"
+            />
             <span className="text-lg font-semibold">EduPay</span>
           </Link>
         )}
         {collapsed && (
-          <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-            <span className="text-sm font-bold text-primary-foreground">E</span>
-          </div>
+          <Link href="/dashboard" className="mx-auto">
+            <Image
+              src="/logo.jpg"
+              alt="EduPay Logo"
+              width={32}
+              height={32}
+              className="rounded-lg"
+            />
+          </Link>
         )}
       </div>
 
