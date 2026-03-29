@@ -12,7 +12,6 @@ import {
   Wallet,
   BarChart3,
   Settings,
-  School,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -22,7 +21,6 @@ import { useState } from "react";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { name: "Schools", href: "/dashboard/schools", icon: School },
   { name: "Students", href: "/dashboard/students", icon: GraduationCap },
   { name: "Guardians", href: "/dashboard/guardians", icon: Users },
   { name: "Invoices", href: "/dashboard/invoices", icon: Receipt },

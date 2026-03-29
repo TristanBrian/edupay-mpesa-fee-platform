@@ -22,6 +22,7 @@ from .routes import (
     loans_router,
     analytics_router,
 )
+from .routes.settings import router as settings_router
 from .services.security import check_env_security
 from .middleware import RateLimitMiddleware, SecurityHeadersMiddleware
 
@@ -131,6 +132,7 @@ app.include_router(payments_router, prefix="/api/v1")
 app.include_router(installments_router, prefix="/api/v1")
 app.include_router(loans_router, prefix="/api/v1")
 app.include_router(analytics_router, prefix="/api/v1")
+app.include_router(settings_router, prefix="/api/v1")
 
 
 @app.get("/")

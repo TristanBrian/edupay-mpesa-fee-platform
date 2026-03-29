@@ -1,4 +1,4 @@
-const API_BASE = "/api/v1";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 
 async function fetcher<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${url}`, {
@@ -17,18 +17,9 @@ async function fetcher<T>(url: string, options?: RequestInit): Promise<T> {
   return response.json();
 }
 
-// Schools API
-export const schoolsApi = {
-  list: () => fetcher<School[]>("/schools"),
-  get: (id: number) => fetcher<School>(`/schools/${id}`),
-  create: (data: CreateSchoolRequest) => 
-    fetcher<School>("/schools", { method: "POST", body: JSON.stringify(data) }),
-};
-
 // Students API
 export const studentsApi = {
-  list: (schoolId?: number) => 
-    fetcher<Student[]>(schoolId ? `/students?school_id=${schoolId}` : "/students"),
+  list: () => fetcher<Student[]>("/students"),
   get: (id: number) => fetcher<Student>(`/students/${id}`),
   create: (data: CreateStudentRequest) =>
     fetcher<Student>("/students", { method: "POST", body: JSON.stringify(data) }),
@@ -57,16 +48,24 @@ export const invoicesApi = {
 
 // Payments API
 export const paymentsApi = {
-  list: (params?: { invoice_id?: number; status?: string }) => {
+  list: (params?: { status?: string; phone?: string }) => {
     const query = new URLSearchParams();
-    if (params?.invoice_id) query.append("invoice_id", params.invoice_id.toString());
     if (params?.status) query.append("status", params.status);
-    return fetcher<Payment[]>(`/payments?${query}`);
+    if (params?.phone) query.append("phone", params.phone);
+    return fetcher<PaymentRecord[]>(`/payments?${query}`);
   },
+  get: (id: number) => fetcher<PaymentRecord>(`/payments/${id}`),
   initiate: (data: InitiatePaymentRequest) =>
-    fetcher<PaymentResponse>("/payments/initiate", { method: "POST", body: JSON.stringify(data) }),
-  getStatus: (checkoutRequestId: string) =>
-    fetcher<PaymentStatusResponse>(`/payments/status/${checkoutRequestId}`),
+    fetcher<PaymentInitiateResponse>("/payments/initiate", { 
+      method: "POST", 
+      body: JSON.stringify(data) 
+    }),
+  getStatus: (transactionId: string) =>
+    fetcher<PaymentStatusResponse>(`/payments/status/${transactionId}`),
+  simulateCallback: (checkoutId: string, success: boolean = true) =>
+    fetcher<SimulateCallbackResponse>(`/payments/simulate-callback/${checkoutId}?success=${success}`, {
+      method: "POST"
+    }),
 };
 
 // Installments API
@@ -81,7 +80,7 @@ export const installmentsApi = {
   createPlan: (data: CreateInstallmentPlanRequest) =>
     fetcher<InstallmentPlan>("/installments/plans", { method: "POST", body: JSON.stringify(data) }),
   payInstallment: (installmentId: number, data: PayInstallmentRequest) =>
-    fetcher<PaymentResponse>(`/installments/${installmentId}/pay`, { method: "POST", body: JSON.stringify(data) }),
+    fetcher<PaymentInitiateResponse>(`/installments/${installmentId}/pay`, { method: "POST", body: JSON.stringify(data) }),
 };
 
 // Loans API
@@ -103,34 +102,31 @@ export const loansApi = {
     fetcher<CreditScore>(`/loans/credit-score/${guardianId}`),
 };
 
+// Settings API
+export const settingsApi = {
+  getMpesaSettings: () => fetcher<MpesaSettingsResponse>("/settings/mpesa"),
+  saveMpesaSettings: (data: SaveMpesaSettingsRequest) =>
+    fetcher<MpesaSettingsResponse>("/settings/mpesa", { 
+      method: "POST", 
+      body: JSON.stringify(data) 
+    }),
+  testConnection: () => fetcher<TestConnectionResponse>("/settings/mpesa/test", { method: "POST" }),
+  clearMpesaSettings: () => fetcher<{ message: string }>("/settings/mpesa", { method: "DELETE" }),
+};
+
 // Analytics API
 export const analyticsApi = {
-  getOverview: (schoolId?: number) =>
-    fetcher<AnalyticsOverview>(`/analytics/overview${schoolId ? `?school_id=${schoolId}` : ""}`),
-  getCollectionTrends: (params?: { school_id?: number; period?: string }) => {
+  getOverview: () => fetcher<AnalyticsOverview>("/analytics/overview"),
+  getCollectionTrends: (params?: { period?: string }) => {
     const query = new URLSearchParams();
-    if (params?.school_id) query.append("school_id", params.school_id.toString());
     if (params?.period) query.append("period", params.period);
     return fetcher<CollectionTrend[]>(`/analytics/collection-trends?${query}`);
   },
-  getAtRiskStudents: (schoolId?: number) =>
-    fetcher<AtRiskStudent[]>(`/analytics/at-risk-students${schoolId ? `?school_id=${schoolId}` : ""}`),
-  getPredictions: (schoolId?: number) =>
-    fetcher<PaymentPrediction>(`/analytics/predictions${schoolId ? `?school_id=${schoolId}` : ""}`),
+  getAtRiskStudents: () => fetcher<AtRiskStudent[]>("/analytics/at-risk-students"),
+  getPredictions: () => fetcher<PaymentPrediction>("/analytics/predictions"),
 };
 
 // Types
-export interface School {
-  id: number;
-  name: string;
-  code: string;
-  email?: string;
-  phone?: string;
-  address?: string;
-  mpesa_shortcode?: string;
-  created_at: string;
-}
-
 export interface Guardian {
   id: number;
   first_name: string;
@@ -146,12 +142,10 @@ export interface Student {
   admission_number: string;
   first_name: string;
   last_name: string;
-  school_id: number;
-  guardian_id: number;
-  grade?: string;
+  guardian_id?: number;
+  class_name?: string;
   status: string;
   created_at: string;
-  school?: School;
   guardian?: Guardian;
 }
 
@@ -159,29 +153,57 @@ export interface Invoice {
   id: number;
   invoice_number: string;
   student_id: number;
-  school_id: number;
-  amount: number;
+  total_amount: number;
   paid_amount: number;
   balance: number;
   due_date: string;
   status: string;
   description?: string;
   term?: string;
-  academic_year?: string;
+  year?: number;
   created_at: string;
   student?: Student;
 }
 
-export interface Payment {
+export interface PaymentRecord {
   id: number;
-  payment_reference: string;
-  invoice_id: number;
+  transaction_id: string;
+  checkout_request_id?: string;
+  merchant_request_id?: string;
   amount: number;
-  phone_number: string;
-  mpesa_receipt?: string;
+  phone: string;
+  account_reference?: string;
   status: string;
-  payment_date?: string;
+  mpesa_receipt_number?: string;
+  result_code?: string;
+  result_desc?: string;
   created_at: string;
+  completed_at?: string;
+}
+
+export interface PaymentInitiateResponse {
+  success: boolean;
+  message: string;
+  transaction_id: string;
+  checkout_id?: string;
+}
+
+export interface PaymentStatusResponse {
+  success: boolean;
+  message: string;
+  status: string;
+  transaction_id: string;
+  checkout_id: string;
+  mpesa_receipt?: string;
+  result_code?: string;
+  result_desc?: string;
+}
+
+export interface SimulateCallbackResponse {
+  message: string;
+  transaction_id: string;
+  status: string;
+  mpesa_receipt?: string;
 }
 
 export interface InstallmentPlan {
@@ -296,15 +318,32 @@ export interface PaymentPrediction {
   recommendations: string[];
 }
 
-// Request types
-export interface CreateSchoolRequest {
-  name: string;
-  code: string;
-  email?: string;
-  phone?: string;
-  address?: string;
+// Settings types
+export interface MpesaSettingsResponse {
+  consumer_key_set: boolean;
+  consumer_secret_set: boolean;
+  environment: string;
+  callback_url: string;
+  shortcode: string;
+  is_configured: boolean;
+  last_updated?: string;
 }
 
+export interface SaveMpesaSettingsRequest {
+  consumer_key: string;
+  consumer_secret: string;
+  environment?: string;
+  callback_url?: string;
+}
+
+export interface TestConnectionResponse {
+  success: boolean;
+  message: string;
+  access_token_obtained: boolean;
+  environment: string;
+}
+
+// Request types
 export interface CreateGuardianRequest {
   first_name: string;
   last_name: string;
@@ -317,25 +356,26 @@ export interface CreateStudentRequest {
   admission_number: string;
   first_name: string;
   last_name: string;
-  school_id: number;
   guardian_id: number;
-  grade?: string;
+  class_name?: string;
 }
 
 export interface CreateInvoiceRequest {
   student_id: number;
-  school_id: number;
-  amount: number;
+  total_amount: number;
   due_date: string;
   description?: string;
   term?: string;
-  academic_year?: string;
+  year?: number;
 }
 
 export interface InitiatePaymentRequest {
-  invoice_id: number;
   amount: number;
-  phone_number: string;
+  phone: string;
+  account_reference: string;
+  transaction_desc?: string;
+  invoice_id?: number;
+  student_id?: number;
 }
 
 export interface CreateInstallmentPlanRequest {
@@ -346,7 +386,7 @@ export interface CreateInstallmentPlanRequest {
 }
 
 export interface PayInstallmentRequest {
-  phone_number: string;
+  phone: string;
   amount?: number;
 }
 
@@ -354,26 +394,11 @@ export interface LoanApplicationRequest {
   guardian_id: number;
   student_id?: number;
   invoice_id?: number;
-  amount: number;
+  principal_amount: number;
   tenure_months: number;
 }
 
 export interface ApproveLoanRequest {
   approved_by: string;
   notes?: string;
-}
-
-export interface PaymentResponse {
-  checkout_request_id: string;
-  merchant_request_id: string;
-  response_code: string;
-  response_description: string;
-  customer_message: string;
-}
-
-export interface PaymentStatusResponse {
-  status: string;
-  result_code?: string;
-  result_description?: string;
-  mpesa_receipt?: string;
 }
