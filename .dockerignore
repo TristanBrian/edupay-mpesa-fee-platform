@@ -1,0 +1,12 @@
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.db
+flexifees.db
+backend/flexifees.db
+.git
+.gitignore
+.env
