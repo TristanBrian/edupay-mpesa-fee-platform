@@ -35,8 +35,8 @@ FlexiFees is a smart financial management ecosystem designed for educational ins
 | **Salha Benazir** | Backend Engineer | salhabenazir@gmail.com |
 | **Leonida Jeptoo** | Frontend/UX Designer | jeptooleonida@gmail.com |
 | **Bevon Mokua** | Backend & Database | bevonmokuas@gmail.com |
-| **Peter Maina** | Backend & Security | mainapeterkanyuku1@gmail.com |
-| **Brian Kioko** | DevOps/Fullstack | [Insert Email] |
+| **Peter Maina** | Backend  | mainapeterkanyuku1@gmail.com |
+| **Brian Kioko** |  Cybersecurity| lessusbrian7@gmail.com |
 
 ---
 
