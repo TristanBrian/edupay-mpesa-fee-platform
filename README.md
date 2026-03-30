@@ -84,9 +84,10 @@ uvicorn app.main:app --reload
 ```
 
 # Start the Dashboard (in a new terminal)
+```
 streamlit run app/analytics/dashboard/dashboard.py
 
-
+```
 ## 🧠 How the Solution Works
 
 The core of FlexiFees' intelligence is its **Anomaly Detection Pipeline**, designed to detect suspicious financial activity in real time.
