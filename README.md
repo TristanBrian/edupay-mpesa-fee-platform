@@ -78,8 +78,10 @@ pip install -r backend/requirements.txt
 ```
 
 # Start the Backend
+```
 cd backend
-python main.py
+uvicorn app.main:app --reload
+```
 
 # Start the Dashboard (in a new terminal)
 streamlit run app/analytics/dashboard/dashboard.py
