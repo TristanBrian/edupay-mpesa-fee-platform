@@ -50,6 +50,7 @@ MPESA_CONSUMER_SECRET=your_secret_here
 MPESA_PASSKEY=your_passkey_here
 DATABASE_URL=sqlite:///./flexifees.db
 DEBUG=True
+```
 
 
 ## ⚙️ Run the Project
@@ -60,6 +61,7 @@ This command builds the environment, initializes the database, and trains the fr
 
 ```bash
 docker compose up --build
+```
 
 ### Access the Services
 
@@ -73,6 +75,7 @@ docker compose up --build
 ```bash
 # Install dependencies
 pip install -r backend/requirements.txt
+```
 
 # Start the Backend
 cd backend
